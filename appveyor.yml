@@ -10,9 +10,11 @@ install:
      If ($env:Platform -Match "x86") {
        $env:MSBUILD_PLATFORM="x86"
        $env:ARTIFACT="vpcd_Win32"
+       $env:X64=""
      } Else {
        $env:MSBUILD_PLATFORM="x64"
        $env:ARTIFACT="vpcd_Win64"
+       $env:X64="x64\"
      }
  - git submodule update --init --recursive
  
@@ -23,7 +25,7 @@ build_script:
  - md %ARTIFACT%
 
  - msbuild virtualsmartcard\win32\BixVReader.sln /p:Configuration=Release;Platform=%MSBUILD_PLATFORM%
- - move    virtualsmartcard\win32\BixVReaderInstaller\bin\Release\BixVReaderInstaller.msi %ARTIFACT%
+ - move    virtualsmartcard\win32\BixVReaderInstaller\bin\%X64%Release\BixVReaderInstaller.msi %ARTIFACT%
 
  - msbuild virtualsmartcard\win32\vpcd-config\vpcd-config.sln /p:Configuration="Debug" /p:Platform=Win32
  - move    virtualsmartcard\win32\vpcd-config\Debug\vpcd-config.exe %ARTIFACT%
