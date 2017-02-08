@@ -137,9 +137,9 @@ static SOCKET connectsock(const char *hostname, unsigned short port)
 	SOCKET sock = INVALID_SOCKET;
     char _port[10];
 
-    if (snprintf(_port, sizeof _port, "%hu", port) < 0)
+    int port_len = snprintf(_port, sizeof _port, "%hu", port);
+    if (port_len < 0 || port_len >= sizeof(_port))
         goto err;
-    _port[(sizeof _port) -1] = '\0';
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_INET;
@@ -189,7 +189,7 @@ SOCKET waitforclient(SOCKET server, long secs, long usecs)
     tv.tv_sec = secs;
     tv.tv_usec = usecs;
 
-    if (select((int) server+1, &rfds, NULL, NULL, &tv) == -1)
+    if (select(FD_SETSIZE, &rfds, NULL, NULL, &tv) == -1)
         return INVALID_SOCKET;
 
     if (FD_ISSET(server, &rfds))
@@ -387,8 +387,8 @@ int vicc_present(struct vicc_ctx *ctx) {
     /* get the atr to check if the card is still alive */
     if (!vicc_connect(ctx, 0, 0) || vicc_getatr(ctx, &atr) <= 0)
         return 0;
-
-    free(atr);
+    if (atr)
+      free(atr);
 
     return 1;
 }

@@ -34,7 +34,7 @@
 /* pcscd allows at most 16 readers. Apple's SmartCardServices on OS X 10.10
  * freaks out if more than 8 slots are registered. We want only two slots... */
 #define VICC_MAX_SLOTS (VPCDSLOTS <= PCSCLITE_MAX_READERS_CONTEXTS ? VPCDSLOTS : PCSCLITE_MAX_READERS_CONTEXTS)
-const unsigned char vicc_max_slots = VICC_MAX_SLOTS;
+const unsigned char vicc_max_slots = 1;
 
 #ifdef HAVE_DEBUGLOG_H
 
@@ -102,7 +102,9 @@ void log_msg(const int priority, const char *fmt, ...)
 #endif
 
 static struct vicc_ctx *ctx[VICC_MAX_SLOTS];
+static int slot_init[VICC_MAX_SLOTS] = { 0 };
 const char *hostname = NULL;
+static char _hostname[MAX_READERNAME];
 static const char openport[] = "/dev/null";
 
 RESPONSECODE
@@ -115,11 +117,15 @@ IFDHCreateChannel (DWORD Lun, DWORD Channel)
     if (!hostname)
         Log2(PCSC_LOG_INFO, "Waiting for virtual ICC on port %hu",
                 (unsigned short) (Channel+slot));
+
+    Log3(PCSC_LOG_INFO, "Connecting to virtual ICC at  %s:%hu",
+                hostname, (unsigned short) (Channel+slot));
     ctx[slot] = vicc_init(hostname, Channel+slot);
     if (!ctx[slot]) {
         Log1(PCSC_LOG_ERROR, "Could not initialize connection to virtual ICC");
         return IFD_COMMUNICATION_ERROR;
     }
+    slot_init[slot] = 1;
     if (hostname)
         Log3(PCSC_LOG_INFO, "Connected to virtual ICC on %s port %hu",
                 hostname, (unsigned short) (Channel+slot));
@@ -132,7 +138,6 @@ IFDHCreateChannelByName (DWORD Lun, LPSTR DeviceName)
 {
     RESPONSECODE r = IFD_NOT_SUPPORTED;
     char *dots;
-    char _hostname[MAX_READERNAME];
     size_t hostname_len;
     unsigned long int port = VPCDPORT;
 
@@ -145,7 +150,7 @@ IFDHCreateChannelByName (DWORD Lun, LPSTR DeviceName)
                 || strncmp(DeviceName, openport, hostname_len) != 0) {
             /* a hostname other than /dev/null has been specified,
              * so we connect initialize hostname to connect to vicc */
-            if (hostname_len < sizeof _hostname)
+            if (hostname_len + 1 < sizeof _hostname)
                 memcpy(_hostname, DeviceName, hostname_len);
             else {
                 Log3(PCSC_LOG_ERROR, "Not enough memory to hold hostname (have %zu, need %zu)", sizeof _hostname, hostname_len);
@@ -195,7 +200,7 @@ RESPONSECODE
 IFDHCloseChannel (DWORD Lun)
 {
     size_t slot = Lun & 0xffff;
-    if (slot >= vicc_max_slots) {
+    if (slot >= vicc_max_slots || !slot_init[slot]) {
         return IFD_COMMUNICATION_ERROR;
     }
     if (vicc_exit(ctx[slot]) < 0) {
@@ -215,7 +220,7 @@ IFDHGetCapabilities (DWORD Lun, DWORD Tag, PDWORD Length, PUCHAR Value)
     size_t slot = Lun & 0xffff;
     RESPONSECODE r = IFD_COMMUNICATION_ERROR;
 
-    if (slot >= vicc_max_slots)
+    if (slot >= vicc_max_slots || !slot_init[slot])
         goto err;
 
     if (!Length || !Value)
@@ -326,7 +331,7 @@ IFDHPowerICC (DWORD Lun, DWORD Action, PUCHAR Atr, PDWORD AtrLength)
     size_t slot = Lun & 0xffff;
     RESPONSECODE r = IFD_COMMUNICATION_ERROR;
 
-    if (slot >= vicc_max_slots) {
+    if (slot >= vicc_max_slots || !slot_init[slot]) {
         goto err;
     }
 
@@ -382,7 +387,7 @@ IFDHTransmitToICC (DWORD Lun, SCARD_IO_HEADER SendPci, PUCHAR TxBuffer,
     RESPONSECODE r = IFD_COMMUNICATION_ERROR;
     size_t slot = Lun & 0xffff;
 
-    if (slot >= vicc_max_slots) {
+    if (slot >= vicc_max_slots || !slot_init[slot]) {
         goto err;
     }
 
@@ -422,7 +427,7 @@ RESPONSECODE
 IFDHICCPresence (DWORD Lun)
 {
     size_t slot = Lun & 0xffff;
-    if (slot >= vicc_max_slots) {
+    if (slot >= vicc_max_slots || !slot_init[slot]) {
         return IFD_COMMUNICATION_ERROR;
     }
     switch (vicc_present(ctx[slot])) {
